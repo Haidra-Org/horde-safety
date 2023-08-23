@@ -33,13 +33,13 @@ This library currently relies on [clip_interrogator](https://github.com/pharmaps
         interrogator=interrogator,
         image=image,
         prompt=prompt,
-        model_info={"nsfw": True, "tags": []}, 
+        model_info={"nsfw": True, "tags": []},
         # model_info can be found at https://github.com/Haidra-Org/AI-Horde-image-model-reference/
     )
 
     if is_csam:
         reject_job()
-        
+
 ```
 
 If you reject a job as a horde worker for CSAM, you should report `'state': 'csam'` in the generate submit payload.
