@@ -6,7 +6,7 @@ import PIL.Image
 from loguru import logger
 
 from horde_safety.csam_checker import check_for_csam
-from horde_safety.interrogate import HordeInterrogateManager
+from horde_safety.interrogate import get_interrogator_no_blip
 
 
 def test_check_for_csam():
@@ -23,13 +23,17 @@ def test_check_for_csam():
     image_paths = list(source_image_folder.glob("*.jpg"))
     image_paths.extend(list(source_image_folder.glob("*.png")))
 
-    interrogate_manager = HordeInterrogateManager()
-    interrogator = interrogate_manager.get_interrogator_no_blip()
+    interrogator = get_interrogator_no_blip()
     # Iterate through all the images in the folder
     for image_path in image_paths:
         image = PIL.Image.open(image_path)
         logger.info(f"Checking {image_path}")
-        is_csam, results, info = check_for_csam(interrogator, image, "", None)
+        is_csam, results, info = check_for_csam(
+            interrogator=interrogator,
+            image=image,
+            prompt="",
+            model_info={"nsfw": True, "tags": []},
+        )
         if is_csam:
             print(json.dumps(info, indent=4))
         del image

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "horde_safety"
-version = "0.0.1"
+version = "0.1.0"
 description = "Provides some of the tools the AI Horde uses for safety."
 authors = [
     {name = "db0", email = "mail@dbzer0.com"},
@@ -69,5 +69,3 @@ select = [
     # "TRY",  # tryceratops
     "RUF100"
 ]
-
-

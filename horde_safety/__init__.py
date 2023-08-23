@@ -1,5 +1,6 @@
+"""Contains the functionality for client-side safety measures for the AI Horde."""
+# flake8: noqa
 import os
-import pathlib
 
 from loguru import logger
 
@@ -15,3 +16,13 @@ if AIWORKER_CACHE_HOME:
         logger.info("TRANSFORMERS_CACHE already set, not overriding")
 else:
     logger.info("AIWORKER_CACHE_HOME not set, using default huggingface cache paths.")
+
+
+from horde_safety.interrogate import get_interrogator_no_blip, CAPTION_MODELS
+from horde_safety.csam_checker import check_for_csam
+
+__all__ = [
+    "get_interrogator_no_blip",
+    "check_for_csam",
+    "CAPTION_MODELS",
+]
