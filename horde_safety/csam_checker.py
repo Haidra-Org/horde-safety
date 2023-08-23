@@ -1,6 +1,7 @@
 """Post process images"""
 import time
 
+import PIL.Image
 import regex as re
 from clip_interrogator import Interrogator  # type: ignore
 from loguru import logger
@@ -255,13 +256,32 @@ whitespace_remover = re.compile(r"(\s(\w)){3,}\b")
 whitespace_converter = re.compile(r"([^\w\s]|_)")
 
 
-def check_for_csam(interrogator: Interrogator, image, prompt, model_info=None):
-    """This is the post-processing function,
-    it takes the model name, and the image, and returns the post processed image"""
+def check_for_csam(
+    interrogator: Interrogator,
+    image: PIL.Image.Image,
+    prompt: str,
+    model_info: dict | None = None,
+):
+    """Checks if an image is potentially CSAM.
+
+    Args:
+        interrogator (Interrogator): The interrogator to use for the check.
+        image (_type_): The image to check.
+        prompt (_type_): The prompt used to create the image.
+        model_info (_type_, optional): The entry from the model reference for the model used
+        to create the image. Defaults to None.
+
+    Returns:
+        _type_: _description_
+    """
     # return False, [], {}
     if not model_info:
         model_info = {}
-    model_nsfw = model_info.get("nsfw", False)
+    model_nsfw = model_info.get("nsfw")
+    if model_nsfw is None:
+        logger.warning("Model info did not contain nsfw, assuming True (this may increase false positives).")
+        logger.warning("Pass in a model reference model entry to prevent this warning.")
+        model_nsfw = True
     model_tags = model_info.get("tags")
     if not model_tags:
         model_tags = []
