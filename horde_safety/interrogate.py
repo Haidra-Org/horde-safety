@@ -49,7 +49,7 @@ def get_interrogator_no_blip(
 
 def get_interrogator(
     *,
-    blip_model_name=CAPTION_MODELS.blip_large,
+    caption_model_name=CAPTION_MODELS.blip_large,
     clip_model_name: CLIP_MODELS = CLIP_MODELS.vit_l_14_open_ai,
 ) -> Interrogator:
     """Get an interrogator with the caption model loaded. This will immediately load the clip and caption models in
@@ -58,7 +58,7 @@ def get_interrogator(
     You should use this if you are using the caption model.
 
     Args:
-        blip_model_name: The name of the caption model to use. Defaults to CAPTION_MODELS.blip_large.
+        caption_model_name: The name of the caption model to use. Defaults to CAPTION_MODELS.blip_large.
         clip_model_name: The name of the clip model to use. Defaults to CLIP_MODELS.vit_l_14_open_ai.
 
     Returns:
@@ -66,7 +66,7 @@ def get_interrogator(
     """
     return Interrogator(
         Config(
-            blip_model_name=blip_model_name,
+            caption_model_name=caption_model_name,
             clip_model_name=clip_model_name,
             clip_model_path=CACHE_FOLDER_PATH,
             cache_path=CACHE_FOLDER_PATH,
