@@ -16,6 +16,10 @@ if AIWORKER_CACHE_HOME:
         logger.info("TRANSFORMERS_CACHE already set, not overriding")
 else:
     logger.info("AIWORKER_CACHE_HOME not set, using default huggingface cache paths.")
+    if os.getenv("TRANSFORMERS_CACHE") is None:
+        CACHE_FOLDER_PATH = "~/.cache/huggingface/"
+    else:
+        CACHE_FOLDER_PATH = os.getenv("TRANSFORMERS_CACHE")
 
 
 from horde_safety.interrogate import get_interrogator_no_blip, CAPTION_MODELS
