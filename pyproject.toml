@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "horde_safety"
-version = "0.1.3"
+version = "0.1.4"
 description = "Provides some of the tools the AI Horde uses for safety."
 authors = [
     {name = "db0", email = "mail@dbzer0.com"},
@@ -17,14 +17,14 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: GNU Affero General Public License v3",
     "Operating System :: OS Independent",
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 4 - Beta",
 ]
 
 dynamic=["dependencies"]
 
-# [project.urls]
-#"Homepage" = ""
-# "Bug Tracker" = ""
+[project.urls]
+"Homepage" = "https://github.com/Haidra-Org/horde-safety/"
+"Bug Tracker" = "https://github.com/Haidra-Org/horde-safety/issues"
 # "Changelog" = ""
 
 [tool.setuptools]
@@ -39,7 +39,7 @@ horde_safety = "horde_safety"
 [tool.black]
 line-length = 119
 
-[tool.ruff] # XXX this isn't part of CI yet
+[tool.ruff]
 line-length=119
 exclude=["build"]
 ignore=[]
