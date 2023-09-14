@@ -24,6 +24,7 @@ class CLIP_MODELS(StrEnum):
 
 def get_interrogator_no_blip(
     clip_model_name: CLIP_MODELS = CLIP_MODELS.vit_l_14_open_ai,
+    device: str | None = None,
 ) -> Interrogator:
     """Get an interrogator without the caption model loaded. This will immediately load the clip model in RAM.
 
@@ -31,6 +32,8 @@ def get_interrogator_no_blip(
 
     Args:
         clip_model_name: The name of the clip model to use. Defaults to CLIP_MODELS.vit_l_14_open_ai.
+        device: The device to use. Possible values include `cuda` and `cpu`. \
+        Defaults to `None` (which will use the default device for the version of PyTorch).
 
     Returns:
         clip_interrogator.Interrogator: An interrogator without the caption model loaded.
@@ -41,6 +44,7 @@ def get_interrogator_no_blip(
             clip_model_name=clip_model_name,
             cache_path=CACHE_FOLDER_PATH,
             clip_model_path=CACHE_FOLDER_PATH,
+            device=device if device else Config.device,
         ),
     )
     Interrogator.load_caption_model = _load_caption_model_func_def
@@ -51,6 +55,7 @@ def get_interrogator(
     *,
     caption_model_name=CAPTION_MODELS.blip_large,
     clip_model_name: CLIP_MODELS = CLIP_MODELS.vit_l_14_open_ai,
+    device: str | None = None,
 ) -> Interrogator:
     """Get an interrogator with the caption model loaded. This will immediately load the clip and caption models in
     RAM.
@@ -60,6 +65,8 @@ def get_interrogator(
     Args:
         caption_model_name: The name of the caption model to use. Defaults to CAPTION_MODELS.blip_large.
         clip_model_name: The name of the clip model to use. Defaults to CLIP_MODELS.vit_l_14_open_ai.
+        device: The device to use. Possible values include `cuda` and `cpu`. \
+        Defaults to `None` (which will use the default device for the version of PyTorch).
 
     Returns:
         clip_interrogator.Interrogator: An interrogator with the caption model loaded.
@@ -70,5 +77,6 @@ def get_interrogator(
             clip_model_name=clip_model_name,
             clip_model_path=CACHE_FOLDER_PATH,
             cache_path=CACHE_FOLDER_PATH,
+            device=device if device else Config.device,
         ),
     )
