@@ -15,7 +15,7 @@ Make sure pytorch is installed, preferably with CUDA/ROCM support.
 
 ## Use
 
-This library currently relies on [clip_interrogator](https://github.com/pharmapsychotic/clip-interrogator). The `check_for_csam` function requires an instance of `clip_interrogator.Interrogator` to be passed. You can pass in on yourself, or use the helper function `get_interrogator_no_blip` (note that calling this function immediately loads the CLIP model).
+This library currently relies on [clip_interrogator](https://github.com/pharmapsychotic/clip-interrogator). The `check_for_csam` function requires an instance of `clip_interrogator.Interrogator` to be passed. You can pass in on yourself, or use the helper function `get_interrogator_no_blip` (note that calling this function immediately loads the CLIP model). Use the `device` parameter to choose the device to load to and use for interrogation. If you want to only use the CPU but have CUDA pytorch installed, use `get_interrogator_no_blip(device="cpu")`.
 
 ```python
     import PIL.Image
