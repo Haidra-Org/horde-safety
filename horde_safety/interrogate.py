@@ -1,12 +1,15 @@
 """Helper functions for using clip_interrogator."""
 
-
+import torch
 from clip_interrogator import Config, Interrogator  # type: ignore
+from open_clip import CLIP  # type: ignore
 from strenum import StrEnum
+from torch import Tensor
 
 from horde_safety import CACHE_FOLDER_PATH
 
 _load_caption_model_func_def = Interrogator.load_caption_model
+_encode_text_func_def = CLIP.encode_text
 
 
 class CAPTION_MODELS(StrEnum):
@@ -20,6 +23,67 @@ class CLIP_MODELS(StrEnum):
     """The available clip models."""
 
     vit_l_14_open_ai = "ViT-L-14/openai"
+    vit_h_14_open_ai = "ViT-H-14/laion2b_s32b_b79k"
+
+
+_cached_tokens: list[tuple[Tensor, Tensor]] = []
+
+
+def _encode_text_hijack(self, tokens: Tensor) -> Tensor:
+    for cached_tokens, cached_result in _cached_tokens:
+        if cached_tokens is tokens or cached_tokens.equal(tokens):
+            return cached_result
+
+    result = _encode_text_func_def(self, tokens)
+    _cached_tokens.append((tokens, result))
+    return result
+
+
+_cached_text_array_features: list[tuple[list[str], Tensor]] = []
+
+_cached_text_features: list[tuple[str, Tensor]] = []
+
+
+def _similarity_hijack(self, image_features: torch.Tensor, text: str) -> float:
+    text_features = None
+
+    self._prepare_clip()
+
+    for cached_text, cached_text_tokens in _cached_text_features:
+        if cached_text == text:
+            text_features = cached_text_tokens
+            break
+    else:
+        text_tokens = self.tokenize([text]).to(self.device)
+        with torch.no_grad(), torch.cuda.amp.autocast():
+            text_features = self.clip_model.encode_text(text_tokens)
+            text_features /= text_features.norm(dim=-1, keepdim=True)  # type: ignore
+        _cached_text_features.append((text, text_features))  # type: ignore
+
+    with torch.no_grad(), torch.cuda.amp.autocast():
+        similarity = text_features @ image_features.T
+    return similarity[0][0].item()
+
+
+def _similarities_hijack(self, image_features: torch.Tensor, text_array: list[str]) -> list[float]:
+    text_features = None
+
+    self._prepare_clip()
+
+    for cached_text_array, cached_text_tokens in _cached_text_array_features:
+        if cached_text_array is text_array or cached_text_array == text_array:
+            text_features = cached_text_tokens
+            break
+    else:
+        text_tokens = self.tokenize(list(text_array)).to(self.device)
+        with torch.no_grad(), torch.cuda.amp.autocast():
+            text_features = self.clip_model.encode_text(text_tokens)
+            text_features /= text_features.norm(dim=-1, keepdim=True)  # type: ignore
+        _cached_text_array_features.append((text_array, text_features))  # type: ignore
+
+    with torch.no_grad(), torch.cuda.amp.autocast():
+        similarity = text_features @ image_features.T
+    return similarity.T[0].tolist()
 
 
 def get_interrogator_no_blip(
@@ -48,6 +112,12 @@ def get_interrogator_no_blip(
         ),
     )
     Interrogator.load_caption_model = _load_caption_model_func_def
+
+    Interrogator.similarity = _similarity_hijack
+    Interrogator.similarities = _similarities_hijack
+
+    CLIP.encode_text = _encode_text_hijack
+
     return interrogator
 
 
@@ -71,6 +141,12 @@ def get_interrogator(
     Returns:
         clip_interrogator.Interrogator: An interrogator with the caption model loaded.
     """
+
+    Interrogator.similarity = _similarity_hijack
+    Interrogator.similarities = _similarities_hijack
+
+    CLIP.encode_text = _encode_text_hijack
+
     return Interrogator(
         Config(
             caption_model_name=caption_model_name,

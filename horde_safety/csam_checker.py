@@ -1,11 +1,13 @@
 """Post process images"""
 import time
+from warnings import warn
 
 import PIL.Image
 import regex as re
 from clip_interrogator import Interrogator  # type: ignore
-from loguru import logger
-from unidecode import unidecode
+
+from horde_safety.nsfw_checker_class import NSFWAnimeScores, NSFWChecker
+from horde_safety.utils import add_value_to_dict_array, get_model_details, normalize_prompt
 
 UNDERAGE_CONTEXT = {
     "lolicon": 0.2,
@@ -251,9 +253,6 @@ NSFW_MODEL_ADJUSTMENTS = [
     ("porn", 0.015),
     ("orgy", 0.01),
 ]
-weight_remover = re.compile(r"\((.*?):\d+\.\d+\)")
-whitespace_remover = re.compile(r"(\s(\w)){3,}\b")
-whitespace_converter = re.compile(r"([^\w\s]|_)")
 
 
 def check_for_csam(
@@ -261,33 +260,39 @@ def check_for_csam(
     image: PIL.Image.Image,
     prompt: str,
     model_info: dict | None = None,
+    *,
+    nsfw_checker: NSFWChecker | None = None,
 ):
     """Checks if an image is potentially CSAM.
 
     Args:
         interrogator (Interrogator): The interrogator to use for the check.
-        image (_type_): The image to check.
-        prompt (_type_): The prompt used to create the image.
-        model_info (_type_, optional): The entry from the model reference for the model used
+        image (PIL.Image.Image): The image to check.
+        prompt (str): The prompt used to create the image.
+        model_info (dict, optional): The entry from the model reference for the model used
         to create the image. Defaults to None.
 
     Returns:
         _type_: _description_
     """
-    # return False, [], {}
-    if not model_info:
-        model_info = {}
-    model_nsfw = model_info.get("nsfw")
-    if model_nsfw is None:
-        logger.warning("Model info did not contain nsfw, assuming True (this may increase false positives).")
-        logger.warning("Pass in a model reference model entry to prevent this warning.")
-        model_nsfw = True
-    model_tags = model_info.get("tags")
-    if not model_tags:
-        model_tags = []
-    poc_start = time.time()
+    warn("check_for_csam is deprecated, use NSFWChecker class instead", DeprecationWarning)
+
+    time.time()
+
+    model_nsfw, model_tags = get_model_details(model_info)
 
     word_list = list(UNDERAGE_CONTEXT.keys()) + list(LEWD_CONTEXT.keys()) + CONTROL_WORDS + TEST_WORDS
+
+    anime_cartoon_predicates = {
+        "japanese animation": 0.20,
+        "Japanese cartoon": 0.20,
+        "anime": 0.20,
+        "cartoon": 0.20,
+        "manga": 0.205,
+    }
+
+    if nsfw_checker is not None and nsfw_checker.deep_danbooru_model is not None:
+        word_list.extend(anime_cartoon_predicates.keys())
 
     similarity_result_values = interrogator.similarities(
         interrogator.image_to_features(image),
@@ -296,7 +301,15 @@ def check_for_csam(
 
     similarity_result: dict[str, float] = dict(zip(word_list, similarity_result_values))
 
-    poc_elapsed_time = time.time() - poc_start
+    is_anime = False
+
+    if nsfw_checker is not None and nsfw_checker.deep_danbooru_model is not None:
+        for predicate_name, predicate_value in anime_cartoon_predicates.items():
+            if similarity_result[predicate_name] > predicate_value:
+                is_anime = True
+                break
+
+    # poc_elapsed_time = time.time() - poc_start
     prompt, negprompt = normalize_prompt(prompt)
     prompt_tweaks: dict[str, float] = {}
     for entry in NEGPROMPT_BOOSTS:
@@ -335,8 +348,8 @@ def check_for_csam(
     for control in CONTROL_WORD_ADJUSTMENTS:
         control_word, threshold = control["control"]
         # logger.info([similarity_result[control_word],control_word,threshold])
-        if similarity_result[control_word] > threshold:
-            for adjust_word, similarity_adjustment in control["adjustments"]:
+        if similarity_result[control_word] > threshold:  # type: ignore
+            for adjust_word, similarity_adjustment in control["adjustments"]:  # type: ignore
                 if adjust_word in PAIRS and similarity_result[PAIRS[adjust_word]] > UNDERAGE_CONTEXT[adjust_word]:
                     continue
                 similarity_result[adjust_word] += similarity_adjustment
@@ -390,42 +403,46 @@ def check_for_csam(
         for l_c in LEWD_CONTEXT
         if similarity_result[l_c] > LEWD_CONTEXT[l_c]
     ]
+
     is_csam = bool(len(found_uc) >= 3 and found_lewd)
-    logger.debug(f"Similarity Result after {poc_elapsed_time} seconds - Result = {is_csam}")
+
+    if not is_csam and is_anime and nsfw_checker is not None and nsfw_checker.deep_danbooru_model is not None:
+        nsfw_anime_result = nsfw_checker.check_for_nsfw_anime_only(image=image, prompt=prompt, model_info=model_info)
+        if nsfw_anime_result is not None:
+            if nsfw_anime_result.is_anime_nsfw:
+                found_lewd.append(
+                    {
+                        "word": nsfw_anime_result.nsfw_anime_scores.explicit_score_key,
+                        "similarity": nsfw_anime_result.nsfw_anime_scores.explicit_score,
+                        "threshold": NSFWAnimeScores.explicit_score_threshold,
+                        "prompt_tweaks": None,
+                        "adjustments": None,
+                        "model_tweaks": None,
+                    },
+                )
+                found_lewd.append(
+                    {
+                        "word": nsfw_anime_result.nsfw_anime_scores.questionable_score_key,
+                        "similarity": nsfw_anime_result.nsfw_anime_scores.questionable_score,
+                        "threshold": NSFWAnimeScores.questionable_score_threshold,
+                        "prompt_tweaks": None,
+                        "adjustments": None,
+                        "model_tweaks": None,
+                    },
+                )
+                found_lewd.append(
+                    {
+                        "word": nsfw_anime_result.nsfw_anime_scores.safe_score_key,
+                        "similarity": nsfw_anime_result.nsfw_anime_scores.safe_score,
+                        "threshold": NSFWAnimeScores.safe_score_threshold,
+                        "prompt_tweaks": None,
+                        "adjustments": None,
+                        "model_tweaks": None,
+                    },
+                )
+                is_csam = bool(len(found_uc) >= 3 and found_lewd)
+    if is_csam:
+        pass
+
+    # logger.debug(f"Similarity Result after {poc_elapsed_time} seconds - Result = {is_csam}")
     return is_csam, similarity_result, {"found_uc": found_uc, "found_lewd": found_lewd}
-
-
-def normalize_prompt(prompt):
-    """Prepares the prompt to be scanned by the regex, by removing tricks one might use to avoid the filters"""
-    negprompt = None
-    if "###" in prompt:
-        prompt, negprompt = prompt.split("###", 1)
-    prompt = weight_remover.sub(r"\1", prompt)
-    prompt = whitespace_converter.sub(" ", prompt)
-    for match in re.finditer(whitespace_remover, prompt):
-        trim_match = match.group(0).strip()
-        replacement = re.sub(r"\s+", "", trim_match)
-        prompt = prompt.replace(trim_match, replacement)
-    prompt = re.sub(r"\s+", " ", prompt)
-    # Remove all accents
-    prompt = unidecode(prompt)
-    if negprompt:
-        negprompt = weight_remover.sub(r"\1", negprompt)
-        negprompt = whitespace_converter.sub(" ", negprompt)
-        for match in re.finditer(whitespace_remover, negprompt):
-            trim_match = match.group(0).strip()
-            replacement = re.sub(r"\s+", "", trim_match)
-            negprompt = negprompt.replace(trim_match, replacement)
-        negprompt = re.sub(r"\s+", " ", negprompt)
-        # Remove all accents
-        negprompt = unidecode(negprompt)
-    return prompt, negprompt
-
-
-def add_value_to_dict_array(dict_to_modify, array_key, value):
-    """Adds a value to an array stored in a dict key
-    If the key does not exist, it is created
-    """
-    if array_key not in dict_to_modify:
-        dict_to_modify[array_key] = []
-    dict_to_modify[array_key].append(value)
