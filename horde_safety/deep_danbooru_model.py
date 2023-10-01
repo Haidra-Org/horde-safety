@@ -48,7 +48,7 @@ def download_deep_danbooru_model(target_filename: str | Path = default_deep_danb
     Args:
         target_folder (str | Path): The folder to download the model to.
     """
-    target_filename = Path(target_filename)
+    target_filename = Path(target_filename) / model_name
 
     logger.info(f"Downloading DeepDanbooru model (~614 mb) to {target_filename}.")
 
