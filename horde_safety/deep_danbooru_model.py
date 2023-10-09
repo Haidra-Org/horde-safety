@@ -56,7 +56,7 @@ def download_deep_danbooru_model(target_filename: str | Path = default_deep_danb
     r = requests.get(model_url, stream=True)
     total_size_in_bytes = int(r.headers.get("content-length", 0))
     block_size = 1024  # 1 Kibibyte
-    progress_bar = tqdm(total=total_size_in_bytes, unit="iB", unit_scale=True)
+    progress_bar = tqdm(total=total_size_in_bytes, unit="iB", unit_scale=True, desc=str(target_filename))
 
     if target_filename.exists():
         if target_filename.stat().st_size == total_size_in_bytes:
