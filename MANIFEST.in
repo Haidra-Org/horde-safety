@@ -1,0 +1,6 @@
+include *.md
+recursive-include horde_safety *.py
+recursive-include horde_safety *.md
+recursive-include horde_safety *.typed
+
+recursive-include tests *.py

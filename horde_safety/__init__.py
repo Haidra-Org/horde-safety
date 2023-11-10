@@ -4,7 +4,7 @@ import os
 
 from loguru import logger
 
-CACHE_FOLDER_PATH: str | None = None
+CACHE_FOLDER_PATH: str
 
 AIWORKER_CACHE_HOME = os.getenv("AIWORKER_CACHE_HOME")
 
@@ -19,14 +19,17 @@ else:
     if os.getenv("TRANSFORMERS_CACHE") is None:
         CACHE_FOLDER_PATH = "~/.cache/huggingface/"
     else:
-        CACHE_FOLDER_PATH = os.getenv("TRANSFORMERS_CACHE")
+        CACHE_FOLDER_PATH = os.getenv("TRANSFORMERS_CACHE", "~/.cache/huggingface/")
 
 
 from horde_safety.interrogate import get_interrogator_no_blip, CAPTION_MODELS
 from horde_safety.csam_checker import check_for_csam
+from horde_safety.deep_danbooru_model import DeepDanbooruModel, get_deep_danbooru_model
 
 __all__ = [
     "get_interrogator_no_blip",
     "check_for_csam",
     "CAPTION_MODELS",
+    "DeepDanbooruModel",
+    "get_deep_danbooru_model",
 ]
