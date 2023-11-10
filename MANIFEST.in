@@ -4,3 +4,5 @@ recursive-include horde_safety *.md
 recursive-include horde_safety *.typed
 
 recursive-include tests *.py
+
+recursive-include third_party_licenses *.txt
