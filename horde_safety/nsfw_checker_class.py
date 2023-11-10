@@ -375,9 +375,9 @@ class NSFWChecker:
     def _set_default_predicates(self) -> None:
         self.image_description_prefixes = {
             "photo of": 0,
-            "painting of": 0.01,
-            "illustration of": 0.01,
-            "3d render of": 0.015,
+            "painting of": 0.005,
+            "illustration of": 0.075,
+            "3d render of": 0.0125,
         }
 
         self.human_predicate_parts = {
@@ -860,7 +860,7 @@ class NSFWChecker:
                         if predicate_similarity_result[predicate] > adjusted_value:
                             found_csam_predicates[predicate] = predicate_similarity_result[predicate]
                 elif not is_anime:
-                    second_pass_multiplier = 0.475
+                    second_pass_multiplier = 0.4
 
                     if is_neg_prompt_suspect:
                         second_pass_multiplier *= 0.5
