@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from horde_safety.deep_danbooru_model import DeepDanbooruModel
 from horde_safety.interrogate import Interrogator
-from horde_safety.utils import get_image_file_paths
+from horde_safety.utils import get_image_file_paths, normalize_prompt
 
 HUMAN_SUBJECT_KEY = "human_subject"
 
@@ -26,6 +26,8 @@ class NSFWResult(BaseModel):
     nsfw_concepts_identified: dict[str, float]
     anime_concepts_identified: dict[str, float]
     is_anime: bool
+
+    is_neg_prompt_suspect: bool = False
 
     is_csam: bool
     csam_predicates_matched: dict[str, float]
@@ -419,7 +421,7 @@ class NSFWChecker:
             "tween": 0.19,
             "tweens": 0.19,
             "lolicon": 0.20,
-            "shota": 0.23,
+            # "shota": 0.23,
         }
 
         self.underage_danger_modifiers = {
@@ -434,7 +436,7 @@ class NSFWChecker:
             "tween": 0.045,
             "tweens": 0.045,
             "lolicon": 0.044,
-            "shota": 0.01,
+            # "shota": 0.01,
         }
         self.underage_danger_concepts = {}
 
@@ -710,7 +712,17 @@ class NSFWChecker:
             NSFWResult | None: The result of the check, or `None` if the check failed.
         """
 
-        # pos_prompt, neg_prompt = normalize_prompt(prompt) # TODO?
+        if prompt is None:
+            prompt = ""
+
+        pos_prompt, neg_prompt = normalize_prompt(prompt)  # TODO?
+        NEGPROMPT_BOOSTS: set = {" mature", ",mature", " old", ",old", "adult", "elderly", "middle aged"}
+
+        is_neg_prompt_suspect = False
+
+        if neg_prompt and any(boost in neg_prompt for boost in NEGPROMPT_BOOSTS):
+            is_neg_prompt_suspect = True
+
         # nsfw_model, model_tags = get_model_details(model_info)
 
         # Get the similarity results for the predicates
@@ -822,10 +834,14 @@ class NSFWChecker:
             if not is_csam:
                 if is_anime:
                     second_pass_multiplier = 0.05
+
+                    if is_neg_prompt_suspect:
+                        second_pass_multiplier -= 0.005
+
                     teen_adjustment = 0.0
 
-                    if predicate_similarity_result["shota"] > self._all_predicates["shota"]:
-                        second_pass_multiplier = 0.0
+                    # if predicate_similarity_result["shota"] > self._all_predicates["shota"]:
+                    # second_pass_multiplier = 0.0
 
                     if predicate_similarity_result["teen"] > (self._all_predicates["teen"] + teen_adjustment):
                         found_csam_predicates["teen"] = predicate_similarity_result["teen"]
@@ -845,6 +861,10 @@ class NSFWChecker:
                             found_csam_predicates[predicate] = predicate_similarity_result[predicate]
                 elif not is_anime:
                     second_pass_multiplier = 0.475
+
+                    if is_neg_prompt_suspect:
+                        second_pass_multiplier *= 0.5
+
                     for predicate, predicate_value in self._combined_underage_predicates.items():
                         adjusted_value = predicate_value + (
                             (
@@ -894,6 +914,7 @@ class NSFWChecker:
             is_anime=is_anime,
             is_csam=is_csam,
             csam_predicates_matched=found_csam_predicates,
+            is_neg_prompt_suspect=is_neg_prompt_suspect,
         )
 
     def get_closest_resize_target(self, image: PIL.Image.Image) -> tuple[int, int]:
