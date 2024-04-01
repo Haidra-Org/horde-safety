@@ -1,4 +1,5 @@
 """Contains the functionality for client-side safety measures for the AI Horde."""
+
 # flake8: noqa
 import os
 
