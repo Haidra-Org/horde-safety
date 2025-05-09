@@ -39,26 +39,21 @@ def _encode_text_hijack(self, tokens: Tensor) -> Tensor:
     return result
 
 
-_cached_text_array_features: list[tuple[list[str], Tensor]] = []
-
-_cached_text_features: list[tuple[str, Tensor]] = []
+_cached_text_array_features: dict[tuple[str, ...], Tensor] = {}
+_cached_text_features: dict[str, Tensor] = {}
 
 
 def _similarity_hijack(self, image_features: torch.Tensor, text: str) -> float:
-    text_features = None
-
     self._prepare_clip()
 
-    for cached_text, cached_text_tokens in _cached_text_features:
-        if cached_text == text:
-            text_features = cached_text_tokens
-            break
+    if text in _cached_text_features:
+        text_features = _cached_text_features[text]
     else:
         text_tokens = self.tokenize([text]).to(self.device)
         with torch.no_grad(), torch.cuda.amp.autocast():
             text_features = self.clip_model.encode_text(text_tokens)
             text_features /= text_features.norm(dim=-1, keepdim=True)  # type: ignore
-        _cached_text_features.append((text, text_features))  # type: ignore
+        _cached_text_features[text] = text_features  # type: ignore
 
     with torch.no_grad(), torch.cuda.amp.autocast():
         similarity = text_features @ image_features.T
@@ -66,20 +61,17 @@ def _similarity_hijack(self, image_features: torch.Tensor, text: str) -> float:
 
 
 def _similarities_hijack(self, image_features: torch.Tensor, text_array: list[str]) -> list[float]:
-    text_features = None
-
     self._prepare_clip()
 
-    for cached_text_array, cached_text_tokens in _cached_text_array_features:
-        if cached_text_array is text_array or cached_text_array == text_array:
-            text_features = cached_text_tokens
-            break
+    text_array_key = tuple(text_array)
+    if text_array_key in _cached_text_array_features:
+        text_features = _cached_text_array_features[text_array_key]
     else:
         text_tokens = self.tokenize(list(text_array)).to(self.device)
         with torch.no_grad(), torch.cuda.amp.autocast():
             text_features = self.clip_model.encode_text(text_tokens)
             text_features /= text_features.norm(dim=-1, keepdim=True)  # type: ignore
-        _cached_text_array_features.append((text_array, text_features))  # type: ignore
+        _cached_text_array_features[text_array_key] = text_features  # type: ignore
 
     with torch.no_grad(), torch.cuda.amp.autocast():
         similarity = text_features @ image_features.T
