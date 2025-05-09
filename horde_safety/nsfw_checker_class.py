@@ -29,6 +29,8 @@ class NSFWResult(BaseModel):
 
     is_neg_prompt_suspect: bool = False
 
+    is_underage_subject: bool
+
     is_csam: bool
     csam_predicates_matched: dict[str, float]
 
@@ -184,6 +186,8 @@ class NSFWFolderResults:
                 self.num_nsfw_images += 1
             if result.found_human_subject:
                 self.num_human_subject_images += 1
+            if result.is_underage_subject:
+                self.num_underage_subject_images += 1
             if result.is_anime:
                 self.num_anime_images += 1
             if result.is_csam:
@@ -209,6 +213,8 @@ class NSFWFolderResults:
     """The number of probable cartoon/anime images in the folder."""
     num_human_subject_images: int = 0
     """The number of images which probably contain a human subject."""
+    num_underage_subject_images: int = 0
+    """The number of images which probably contain an underage subject."""
     num_csam_images: int = 0
     """The number of potential CSAM images."""
 
@@ -249,11 +255,15 @@ class NSFWFolderResults:
         return self.num_csam_images / len(self.all_results) * 100
 
     def __repr__(self) -> str:
-        val = f"{self.folder_path.stem} (is nsfw {self.expecting_nsfw}) ({len(self.all_results)}): "
-        val += f"{self.percent_nsfw:.2f}% nsfw ({self.num_nsfw_images}), "
-        val += f"{self.percent_not_nsfw:.2f}% not-nsfw ({len(self.all_results) - self.num_nsfw_images}) "
-        val += f"(anime: {self.num_anime_images}, human subjects: {self.num_human_subject_images}, "
-        val += f"csam {self.percent_csam:.2f}% ({self.num_csam_images})) "
+        val = (
+            f"{self.folder_path.stem} (is nsfw {self.expecting_nsfw}) ({len(self.all_results)}): "
+            f"{self.percent_nsfw:.2f}% nsfw ({self.num_nsfw_images}), "
+            f"{self.percent_not_nsfw:.2f}% not-nsfw ({len(self.all_results) - self.num_nsfw_images}) "
+            f"(anime: {self.num_anime_images}, human subjects: {self.num_human_subject_images}, "
+            f"underage: {self.num_underage_subject_images}) "
+            f"csam {self.percent_csam:.2f}% ({self.num_csam_images})) "
+        )
+
         return val
 
 
@@ -838,15 +848,16 @@ class NSFWChecker:
         is_csam = False
 
         found_csam_predicates: dict[str, float] = {}
-        if is_nsfw:
+        # if is_nsfw:
+        if True:
             for predicate, predicate_value in self._combined_underage_danger_concepts.items():
                 if predicate_similarity_result[predicate] > predicate_value:
                     found_csam_predicates[predicate] = predicate_similarity_result[predicate]
 
             if len(found_csam_predicates) >= 1:
-                is_csam = True
+                is_underage_subject = True
 
-            if not is_csam:
+            if not is_underage_subject:
                 if is_anime:
                     second_pass_multiplier = 0.05
 
@@ -915,9 +926,12 @@ class NSFWChecker:
                             del found_csam_predicates[concept1]
 
                 if is_anime and len(found_csam_predicates) >= 2:
-                    is_csam = True
+                    is_underage_subject = True
                 elif len(found_csam_predicates) >= 2:
-                    is_csam = True
+                    is_underage_subject = True
+
+        if is_underage_subject and is_nsfw:
+            is_csam = True
 
         return NSFWResult(
             all_predicate_scores=predicate_similarity_result,
@@ -927,6 +941,7 @@ class NSFWChecker:
             is_nsfw=is_nsfw,
             nsfw_concepts_identified=nsfw_concepts_identified,
             is_anime=is_anime,
+            is_underage_subject=is_underage_subject,
             is_csam=is_csam,
             csam_predicates_matched=found_csam_predicates,
             is_neg_prompt_suspect=is_neg_prompt_suspect,
