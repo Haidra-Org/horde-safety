@@ -1,13 +1,144 @@
 import json
+import sys
 import time
 from enum import Enum
 from pathlib import Path
 
+import numpy as np
 import PIL.Image
+import pytest
+from clip_interrogator.clip_interrogator import tqdm
+from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
+from torch import device
+from transformers.models.clip import CLIPFeatureExtractor
 
 from horde_safety.deep_danbooru_model import DeepDanbooruModel
 from horde_safety.interrogate import Interrogator
 from horde_safety.nsfw_checker_class import NSFWChecker, NSFWFolderChecker, NSFWFolderResults
+from horde_safety.utils import get_image_file_paths
+
+
+@pytest.fixture()
+def stable_diffusion_safety_checker() -> StableDiffusionSafetyChecker:
+    return StableDiffusionSafetyChecker.from_pretrained(
+        "CompVis/stable-diffusion-safety-checker",
+        device_map="cuda",
+    )
+
+
+@pytest.fixture()
+def clip_feature_extractor() -> CLIPFeatureExtractor:
+    return CLIPFeatureExtractor()
+
+
+def test_stable_diffusion_safety_checker(
+    stable_diffusion_safety_checker: StableDiffusionSafetyChecker,
+    clip_feature_extractor: CLIPFeatureExtractor,
+    nsfw_pilot_folders: list[Path],
+    sfw_pilot_folders: list[Path],
+    neutral_pilot_folders: list[Path],
+    inappropriate_pilot_folders: list[Path],
+    nsfw_folders: list[Path],
+    sfw_folders: list[Path],
+    lewd_folders: list[Path],
+    inappropriate_folders: list[Path],
+    neutral_folders: list[Path],
+):
+
+    all_folders_to_check = [
+        *nsfw_pilot_folders,
+        *sfw_pilot_folders,
+        *neutral_pilot_folders,
+        *inappropriate_pilot_folders,
+        *nsfw_folders,
+        *sfw_folders,
+        *lewd_folders,
+        *inappropriate_folders,
+        *neutral_folders,
+    ]
+
+    assert len(all_folders_to_check) == (
+        len(nsfw_pilot_folders)
+        + len(sfw_pilot_folders)
+        + len(neutral_pilot_folders)
+        + len(inappropriate_pilot_folders)
+        + len(nsfw_folders)
+        + len(sfw_folders)
+        + len(lewd_folders)
+        + len(inappropriate_folders)
+        + len(neutral_folders)
+    )
+
+    resize_targets = []
+    for i in range(128, 769, 128):
+        for j in range(128, 769, 128):
+            if i == j:
+                resize_targets.append((i, j))
+            else:
+                resize_targets.append((i, j))
+                resize_targets.append((j, i))
+
+    def get_closest_resize_target(image: PIL.Image.Image) -> tuple[int, int]:
+        width, height = image.size
+        closest_target = min(
+            resize_targets,
+            key=lambda target: abs(target[0] - width) + abs(target[1] - height),
+        )
+        return closest_target
+
+    import logging
+
+    logging.getLogger("diffusers").setLevel(logging.CRITICAL)
+
+    for folder in all_folders_to_check:
+
+        image_file_paths = get_image_file_paths(folder)
+
+        progress_bar = tqdm(
+            total=len(image_file_paths),
+            file=sys.stdout,
+        )
+
+        total_sfw_images = 0
+        total_nsfw_images = 0
+        total_errors = 0
+
+        for image_file_path in image_file_paths:
+            try:
+                image = PIL.Image.open(image_file_path)
+                image = image.resize(get_closest_resize_target(image), resample=PIL.Image.LANCZOS)
+                image = image.convert("RGB")
+
+                image_features = clip_feature_extractor(images=image, return_tensors="pt").to(device("cuda"))
+                _, has_nsfw_concept = stable_diffusion_safety_checker(  # type: ignore
+                    clip_input=image_features["pixel_values"],
+                    images=[np.asarray(image)],
+                )
+
+                if has_nsfw_concept[0]:
+                    total_nsfw_images += 1
+                else:
+                    total_sfw_images += 1
+
+                progress_bar.set_postfix(
+                    {
+                        "folder": folder.name,
+                        "total_sfw_images": total_sfw_images,
+                        "sfw_percent": total_sfw_images / (total_sfw_images + total_nsfw_images) * 100,
+                        "total_nsfw_images": total_nsfw_images,
+                        "nsfw_percent": total_nsfw_images / (total_sfw_images + total_nsfw_images) * 100,
+                        "total_errors": total_errors,
+                    },
+                    refresh=True,
+                )
+
+                progress_bar.update(1)
+
+            except Exception as e:
+                total_errors += 1
+                print(f"Error processing {image_file_path}: {e}")
+
+        progress_bar.close()
 
 
 class TestNSFWChecker:
