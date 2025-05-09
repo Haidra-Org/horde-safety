@@ -527,7 +527,6 @@ class NSFWChecker:
                 self._combined_underage_danger_concepts[f"{prefix} {danger_predicate}"] = (
                     prefix_value + danger_predicate_value
                 )
-
                 self._combined_underage_predicates[f"{prefix} {danger_predicate}"] = (
                     prefix_value + self.underage_predicates[danger_predicate]
                 )
@@ -560,8 +559,9 @@ class NSFWChecker:
 
             for d in dicts:
                 for k, v in d.items():
-                    if k in found_keys:
-                        raise ValueError(f"Found duplicate key {k} in predicates")
+                    if k in found_keys and k not in self.underage_predicates:
+                        # raise ValueError(f"Found duplicate key {k} in predicates")
+                        logger.warning(f"Found duplicate key {k} in predicates")
                     found_keys.append(k)
 
             raise ValueError(
@@ -678,26 +678,40 @@ class NSFWChecker:
         self._all_nsfw_concept_names_only = list(self._all_nsfw_concepts.keys())
 
     def get_nsfw_concept_similarities(self, image: PIL.Image.Image) -> dict[str, float]:
+        """Get NSFW concept similarities for the given image."""
         similarity_results = self.interrogator.similarities(
             image_features=self.interrogator.image_to_features(image),
             text_array=self._all_nsfw_concept_names_only,
         )
-        similarity_results = [round(float(value), 4) for value in similarity_results]
-        return dict(zip(self._all_nsfw_concepts, similarity_results))
+        return {concept: round(float(value), 4) for concept, value in zip(self._all_nsfw_concepts, similarity_results)}
 
-    def get_predicate_similarities(self, image: PIL.Image.Image) -> dict[str, float]:
-        similarity_results = self.interrogator.similarities(
-            image_features=self.interrogator.image_to_features(image),
-            text_array=self._all_predicate_names_only,
-        )
-        similarity_results = [round(float(value), 4) for value in similarity_results]
-        return dict(zip(self._all_predicates.keys(), similarity_results))
+    def get_predicate_similarities(self, image: PIL.Image.Image | torch.Tensor) -> dict[str, float]:
+        """Get predicate similarities for the given image."""
+        if isinstance(image, PIL.Image.Image):
+            similarity_results = self.interrogator.similarities(
+                image_features=self.interrogator.image_to_features(image),
+                text_array=self._all_predicate_names_only,
+            )
+        elif isinstance(image, torch.Tensor):
+            similarity_results = self.interrogator.similarities(
+                image_features=image.unsqueeze(0),
+                text_array=self._all_predicate_names_only,
+            )
+        else:
+            raise ValueError("Image must be a PIL Image or a torch Tensor.")
+
+        return {
+            predicate: round(float(value), 4)
+            for predicate, value in zip(self._all_predicates.keys(), similarity_results)
+        }
 
     def check_for_nsfw(
         self,
         image: PIL.Image.Image,
         prompt: str | None = None,
         model_info: dict | None = None,
+        *,
+        image_tensor: torch.Tensor | None = None,
     ) -> NSFWResult | None:
         """Checks if an image is potentially NSFW. It is known to have false positive and false negative results.
 
@@ -726,7 +740,9 @@ class NSFWChecker:
         # nsfw_model, model_tags = get_model_details(model_info)
 
         # Get the similarity results for the predicates
-        predicate_similarity_result = self.get_predicate_similarities(image=image)
+        predicate_similarity_result = self.get_predicate_similarities(
+            image=image_tensor if image_tensor is not None else image,
+        )
 
         # Determine if the image is anime or cartoon
         is_anime = False
@@ -775,17 +791,16 @@ class NSFWChecker:
         contains_subject_requiring_check = False
 
         for predicate_term in self._all_predicates.keys():
-            if predicate_similarity_result[predicate_term] > self._all_predicates[predicate_term]:
-                matched_predicates[predicate_term] = round(predicate_similarity_result[predicate_term], 4)
+            predicate_similarity = predicate_similarity_result[predicate_term]
 
-            if (
+            if predicate_similarity > self._all_predicates[predicate_term]:
+                matched_predicates[predicate_term] = round(predicate_similarity, 4)
+                contains_subject_requiring_check = True
+            elif (
                 predicate_term in self._combined_underage_danger_concepts
-                and predicate_similarity_result[predicate_term]
-                > self._combined_underage_danger_concepts[predicate_term]
+                and predicate_similarity > self._combined_underage_danger_concepts[predicate_term]
             ):
                 contains_subject_requiring_check = True
-
-        contains_subject_requiring_check = contains_subject_requiring_check or len(matched_predicates) >= 1
 
         # Get the similarity results for the nsfw concepts
         nsfw_similarity_results.update(self.get_nsfw_concept_similarities(image=image))
@@ -1172,30 +1187,68 @@ class NSFWFolderChecker(NSFWChecker):
 
         progress_bar = tqdm(total=len(image_file_paths))
 
+        def preload_images(paths: list[Path]) -> dict[Path, tuple[PIL.Image.Image, torch.Tensor]]:
+            images: dict[Path, tuple[PIL.Image.Image, torch.Tensor]] = {}
+            pil_images = []
+            valid_paths = []
+            for path in paths:
+                try:
+                    image = PIL.Image.open(path)
+                    pil_images.append(image)
+                    valid_paths.append(path)
+                except Exception as e:
+                    logger.trace(f"Error loading image ({type(e)}): {path}")
+            # Batch feature extraction if any images loaded
+            if pil_images:
+                try:
+                    # image_to_features supports batch input
+                    image_tensors = self.interrogator.image_to_features(pil_images)
+                    # image_tensors is a tensor of shape (batch_size, feature_dim)
+                    for path, image, tensor in zip(valid_paths, pil_images, image_tensors, strict=True):
+                        images[path] = (image, tensor)
+                except Exception as e:
+                    logger.trace(f"Error in batch feature extraction: {e}")
+                    # fallback to per-image extraction if batch fails
+                    for path, image in zip(valid_paths, pil_images):
+                        try:
+                            tensor = self.interrogator.image_to_features(image)
+                            images[path] = (image, tensor)
+                        except Exception as e2:
+                            logger.trace(f"Error extracting features for image ({type(e2)}): {path}")
+            return images
+
         with redirect_stdout(None) if redirect_console_output else nullcontext():
             with redirect_stderr(None) if redirect_console_output else nullcontext():
-                for image_file_path in image_file_paths:
-                    if not image_file_path.exists():
-                        logger.error(f"Image file path does not exist: {image_file_path}")
-                        continue
+                batch_size = 500
+                for i in range(0, len(image_file_paths), batch_size):
+                    batch_paths = image_file_paths[i : i + batch_size]
+                    preloaded_images = preload_images(batch_paths)
 
-                    try:
-                        progress_bar.set_description(str(folder_result))
-                        image = PIL.Image.open(image_file_path)
-                        result = self.check_for_nsfw(image)
+                    for image_file_path in batch_paths:
+                        if not image_file_path.exists():
+                            logger.error(f"Image file path does not exist: {image_file_path}")
+                            continue
 
-                        folder_result.add_result(
-                            path=image_file_path,
-                            result=result,
-                        )
+                        try:
+                            progress_bar.set_description(str(folder_result))
+                            image, image_tensor = preloaded_images.get(image_file_path, (None, None))
+                            if image is None:
+                                continue
+                            result = self.check_for_nsfw(
+                                image,
+                                image_tensor=image_tensor,
+                            )
 
-                    except Exception as e:
-                        logger.error(f"Error checking image ({type(e)}): {image_file_path}")
-                        logger.error(e)
-                        continue
-                        # raise e
-                    finally:
-                        progress_bar.update(1)
+                            folder_result.add_result(
+                                path=image_file_path,
+                                result=result,
+                            )
+
+                        except Exception as e:
+                            logger.trace(f"Error checking image ({type(e)}): {image_file_path}")
+                            logger.trace(e)
+                        finally:
+                            progress_bar.update(1)
 
         progress_bar.close()
 
