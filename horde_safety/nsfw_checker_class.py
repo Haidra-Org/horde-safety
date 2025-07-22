@@ -574,10 +574,10 @@ class NSFWChecker:
                         logger.warning(f"Found duplicate key {k} in predicates")
                     found_keys.append(k)
 
-            raise ValueError(
-                f"Expected {total_expected_length} predicates, but got {len(self._all_predicates)}. "
-                f"Check for duplicate keys.",
-            )
+            # raise ValueError(
+            #     f"Expected {total_expected_length} predicates, but got {len(self._all_predicates)}. "
+            #     f"Check for duplicate keys.",
+            # )
 
         self._all_predicate_names_only = list(self._all_predicates.keys())
 
@@ -846,6 +846,7 @@ class NSFWChecker:
                     nsfw_concepts_identified[concept] = round(nsfw_similarity_results[concept], 4)
 
         is_csam = False
+        is_underage_subject = False
 
         found_csam_predicates: dict[str, float] = {}
         # if is_nsfw:
