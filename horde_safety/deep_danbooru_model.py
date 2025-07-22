@@ -39,7 +39,7 @@ def verify_deep_danbooru_model_hash(target_filename: str | Path) -> bool:
     return True
 
 
-default_deep_danbooru_model_path = Path(CACHE_FOLDER_PATH) / model_name
+default_deep_danbooru_model_path: Path = Path(CACHE_FOLDER_PATH) / model_name
 
 
 def download_deep_danbooru_model(target_filename: str | Path = default_deep_danbooru_model_path):
