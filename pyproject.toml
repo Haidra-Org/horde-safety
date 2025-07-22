@@ -30,6 +30,9 @@ dynamic=["dependencies", "version"]
 [tool.setuptools]
 license-files = ["LICENSE", "CHANGELOG*"]
 
+[tool.setuptools_scm]
+write_to = "horde_safety/_version.py"
+
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
 
