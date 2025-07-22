@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "horde_safety"
-version = "0.2.4"
+# version = "0.2.4"
 description = "Provides some of the tools the AI Horde uses for safety."
 authors = [
     {name = "db0", email = "mail@dbzer0.com"},
@@ -20,7 +20,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
 ]
 
-dynamic=["dependencies"]
+dynamic=["dependencies", "version"]
 
 [project.urls]
 "Homepage" = "https://github.com/Haidra-Org/horde-safety/"
