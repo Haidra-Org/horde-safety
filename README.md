@@ -1,16 +1,19 @@
 # horde-safety
+
 Provides safety features used by the horde, especially to do with image generation.
 
-## Note
+## Environment Variables
 
-This library is made with the default AI Horde worker in mind, and relies on the environment variable `AIWORKER_CACHE_HOME` to establish isolation of the clip models on disk. If you do not want to rely on a horde specific folder structure, define `TRANSFORMERS_CACHE` to define where you'd prefer the models to be. If neither are defined, the default huggingface folder location for the system used, typically `~/.cache`, depending on other environnement variables, [see the official huggingface docs](https://huggingface.co/docs/transformers/installation#cache-setup) for more info.
+This library is made with the default AI Horde worker in mind, and relies on the environment variable `AIWORKER_CACHE_HOME` to establish isolation of the clip models on disk. If you do not want to rely on a horde specific folder structure, define `HF_HOME` to define where you'd prefer the models to be. If neither are defined, the default huggingface folder location for the system used, typically `~/.cache`, depending on other environnement variables, [see the official huggingface docs](https://huggingface.co/docs/transformers/installation#cache-setup) for more info.
+
+> Warning: If you use `AIWORKER_CACHE_HOME`, other environment variables can and will be overridden, including `HF_HOME` and potentially any other related variables. Using `AIWORKER_CACHE_HOME` is explictly opting into the horde isolation scheme, which may not be suitable for other contexts and may lead to duplicate (and very large) models on disk. If you want to use this library outside of the horde, it is recommended to set `HF_HOME` instead.
 
 ## Installing
 
-Make sure pytorch is installed, preferably with CUDA/ROCM support.
+Make sure pytorch is installed, preferably with CUDA/ROCM or other GPU support.
 
 ```bash
-    pip install horde_safety
+pip install horde_safety
 ```
 
 ## Use
