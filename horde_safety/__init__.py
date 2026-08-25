@@ -41,15 +41,21 @@ def setup_cache_paths() -> str:
     transformers_cache = os.getenv("TRANSFORMERS_CACHE")
     hf_home = os.getenv("HF_HOME")
 
-    if aiworker_cache_home and not (transformers_cache or hf_home):
+    if aiworker_cache_home:
+        # The worker's cache root owns the CLIP/BLIP folder outright. It does not follow HF_HOME: a host
+        # that points the transformers cache elsewhere (a worker-wide hub location, say) must not move the
+        # safety weights it already holds here and fetch them again.
         cache_folder_path = os.path.join(aiworker_cache_home, "clip_blip")
-        os.environ["HF_HOME"] = os.path.join(aiworker_cache_home, "hf_transformers")
-        logger.debug(f"Set CACHE_FOLDER_PATH to {cache_folder_path} and HF_HOME to {os.environ['HF_HOME']}")
-    else:
-        if aiworker_cache_home:
-            logger.info("TRANSFORMERS_CACHE or HF_HOME already set, not overriding")
+        if transformers_cache or hf_home:
+            logger.info(
+                f"TRANSFORMERS_CACHE or HF_HOME already set; the transformers cache stays there and "
+                f"CACHE_FOLDER_PATH is {cache_folder_path}",
+            )
         else:
-            logger.info("AIWORKER_CACHE_HOME not set, using default huggingface cache paths.")
+            os.environ["HF_HOME"] = os.path.join(aiworker_cache_home, "hf_transformers")
+            logger.debug(f"Set CACHE_FOLDER_PATH to {cache_folder_path} and HF_HOME to {os.environ['HF_HOME']}")
+    else:
+        logger.info("AIWORKER_CACHE_HOME not set, using default huggingface cache paths.")
         cache_folder_path = get_cache_folder_path()
 
     os.makedirs(cache_folder_path, exist_ok=True)
